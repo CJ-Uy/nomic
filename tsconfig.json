@@ -1,31 +1,20 @@
 {
+	"extends": "./.svelte-kit/tsconfig.json",
 	"compilerOptions": {
-		"target": "es2024",
-		"lib": ["dom", "dom.iterable", "esnext"],
+		"rewriteRelativeImportExtensions": true,
 		"allowJs": true,
-		"skipLibCheck": true,
-		"strict": true,
-		"noEmit": true,
+		"checkJs": true,
 		"esModuleInterop": true,
-		"module": "esnext",
-		"moduleResolution": "bundler",
+		"forceConsistentCasingInFileNames": true,
 		"resolveJsonModule": true,
-		"isolatedModules": true,
-		"jsx": "react-jsx",
-		"incremental": true,
-		"plugins": [
-			{
-				"name": "next"
-			}
-		],
-		"paths": {
-			"@/*": ["./src/*"]
-		},
+		"skipLibCheck": true,
+		"sourceMap": true,
+		"strict": true,
+		"moduleResolution": "bundler",
 		"types": [
-			"./cloudflare-env.d.ts",
-			"node"
+			"./worker-configuration.d.ts",
+			"node",
+			"src/worker-configuration.d.ts"
 		]
-	},
-	"include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", ".next/dev/types/**/*.ts"],
-	"exclude": ["node_modules"]
+	}
 }
