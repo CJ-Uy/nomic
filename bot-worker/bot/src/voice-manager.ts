@@ -36,7 +36,7 @@ export async function joinChannel(guild: Guild, voiceChannelId: string): Promise
 		channelId: voiceChannelId,
 		guildId: guild.id,
 		adapterCreator: guild.voiceAdapterCreator as any,
-		selfDeaf: false,
+		selfDeaf: true,
 		selfMute: false,
 	});
 
