@@ -1,8 +1,9 @@
 {
 	"$schema": "../node_modules/wrangler/config-schema.json",
 	"name": "nomic-bot",
+	"account_id": "8527ec1369d46f55304a6f59ab5356e4",
 	"main": "index.ts",
-	"compatibility_date": "2025-10-08",
+	"compatibility_date": "2026-04-01",
 	"compatibility_flags": ["nodejs_compat"],
 
 	"containers": [

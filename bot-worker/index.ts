@@ -1,7 +1,8 @@
-import { Container } from 'cloudflare:containers';
+import { Container, getContainer } from '@cloudflare/containers';
+import { env } from 'cloudflare:workers';
 
 interface Env {
-	BOT_MANAGER: DurableObjectNamespace;
+	BOT_MANAGER: DurableObjectNamespace<BotManager>;
 	DISCORD_TOKEN: string;
 	BOT_SECRET: string;
 	WORKER_URL: string;
@@ -12,15 +13,12 @@ export class BotManager extends Container<Env> {
 	defaultPort = 3000;
 	sleepAfter = '15m';
 
-	constructor(state: DurableObjectState, env: Env) {
-		super(state, env);
-		this.envVars = {
-			DISCORD_TOKEN: env.DISCORD_TOKEN,
-			WORKER_URL: env.WORKER_URL,
-			BOT_SECRET: env.BOT_SECRET,
-			BOT_WORKER_URL: env.BOT_WORKER_URL,
-		};
-	}
+	envVars = {
+		DISCORD_TOKEN: (env as Env).DISCORD_TOKEN,
+		WORKER_URL: (env as Env).WORKER_URL,
+		BOT_SECRET: (env as Env).BOT_SECRET,
+		BOT_WORKER_URL: (env as Env).BOT_WORKER_URL,
+	};
 
 	override onStart(): void {
 		console.log('[nomic] Bot container started');
@@ -42,9 +40,7 @@ export default {
 			return new Response('Unauthorized', { status: 401 });
 		}
 
-		const id = env.BOT_MANAGER.idFromName('singleton');
-		const stub = env.BOT_MANAGER.get(id);
-
+		const stub = getContainer(env.BOT_MANAGER, 'singleton');
 		return stub.fetch(request);
 	},
 } satisfies ExportedHandler<Env>;
