@@ -40,10 +40,13 @@ export async function joinChannel(guild: Guild, voiceChannelId: string): Promise
 		selfMute: false,
 	});
 
-	await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
-
 	const player = createAudioPlayer();
 	connection.subscribe(player);
+
+	// Store immediately — isActive() returns true, messages are accepted
+	// We don't block on Ready here; processQueue waits for Ready before playing
+	connections.set(guild.id, { connection, player, queue: [], playing: false });
+	addSession({ guildId: guild.id, voiceChannelId });
 
 	connection.on(VoiceConnectionStatus.Disconnected, async () => {
 		try {
@@ -57,9 +60,6 @@ export async function joinChannel(guild: Guild, voiceChannelId: string): Promise
 			removeSession(guild.id);
 		}
 	});
-
-	connections.set(guild.id, { connection, player, queue: [], playing: false });
-	addSession({ guildId: guild.id, voiceChannelId });
 }
 
 export async function leaveChannel(guildId: string): Promise<void> {
@@ -100,6 +100,9 @@ async function processQueue(guildId: string): Promise<void> {
 	const { text, config } = conn.queue.shift()!;
 
 	try {
+		// Wait up to 60s for the voice connection to be ready before playing
+		await entersState(conn.connection, VoiceConnectionStatus.Ready, 60_000);
+
 		const audioStream = await synthesize(text, config);
 		const resource = createAudioResource(audioStream, {
 			inputType: StreamType.Arbitrary,

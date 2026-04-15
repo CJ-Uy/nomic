@@ -14,7 +14,7 @@ export async function joinChannel(guild, voiceChannelId) {
         channelId: voiceChannelId,
         guildId: guild.id,
         adapterCreator: guild.voiceAdapterCreator,
-        selfDeaf: false,
+        selfDeaf: true,
         selfMute: false,
     });
     await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
