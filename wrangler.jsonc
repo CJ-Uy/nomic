@@ -1,5 +1,6 @@
 {
-	"name": "memorize-baybayin",
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "nomic",
 	"main": ".svelte-kit/cloudflare/_worker.js",
 	"compatibility_date": "2024-12-01",
 	"compatibility_flags": ["nodejs_compat"],
@@ -18,5 +19,20 @@
 		"traces": {
 			"enabled": false
 		}
-	}
+	},
+
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "nomic",
+			"database_id": "bf6d9e95-c49d-4cf7-b1aa-9e4bfd304e57"
+		}
+	],
+
+	"services": [
+		{
+			"binding": "BOT",
+			"service": "nomic-bot"
+		}
+	]
 }
