@@ -1,0 +1,35 @@
+{
+	"$schema": "../node_modules/wrangler/config-schema.json",
+	"name": "nomic-bot",
+	"main": "index.ts",
+	"compatibility_date": "2025-10-08",
+	"compatibility_flags": ["nodejs_compat"],
+
+	"containers": [
+		{
+			"class_name": "BotManager",
+			"image": "./bot/Dockerfile",
+			"max_instances": 1
+		}
+	],
+
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "BOT_MANAGER",
+				"class_name": "BotManager"
+			}
+		]
+	},
+
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["BotManager"]
+		}
+	],
+
+	"observability": {
+		"enabled": true
+	}
+}

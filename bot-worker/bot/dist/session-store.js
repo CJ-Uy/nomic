@@ -1,0 +1,47 @@
+const sessions = new Map();
+let keepAliveInterval = null;
+export function addSession(session) {
+    sessions.set(session.guildId, session);
+    startKeepAlive();
+}
+export function removeSession(guildId) {
+    sessions.delete(guildId);
+    if (sessions.size === 0) {
+        stopKeepAlive();
+    }
+}
+export function getSession(guildId) {
+    return sessions.get(guildId);
+}
+export function hasSession(guildId) {
+    return sessions.has(guildId);
+}
+export function activeSessions() {
+    return Array.from(sessions.values());
+}
+function startKeepAlive() {
+    if (keepAliveInterval)
+        return;
+    const botWorkerUrl = process.env.BOT_WORKER_URL ?? '';
+    const botSecret = process.env.BOT_SECRET ?? '';
+    keepAliveInterval = setInterval(async () => {
+        if (sessions.size === 0) {
+            stopKeepAlive();
+            return;
+        }
+        try {
+            await fetch(`${botWorkerUrl}/ping`, {
+                headers: { 'x-bot-secret': botSecret },
+            });
+        }
+        catch {
+            // Non-fatal — container sleeps on its own after sleepAfter if this fails
+        }
+    }, 10 * 60 * 1000);
+}
+function stopKeepAlive() {
+    if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+        keepAliveInterval = null;
+    }
+}
