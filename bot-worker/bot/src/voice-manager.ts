@@ -29,7 +29,12 @@ export async function joinChannel(guild: Guild, voiceChannelId: string): Promise
 
 	const channel = guild.channels.cache.get(voiceChannelId);
 	if (!channel || !channel.isVoiceBased()) {
-		throw new Error('Channel not found or not a voice channel');
+		// Channel not in cache — fetch it and retry
+		await guild.channels.fetch();
+		const fetched = guild.channels.cache.get(voiceChannelId);
+		if (!fetched || !fetched.isVoiceBased()) {
+			throw new Error('Channel not found or not a voice channel');
+		}
 	}
 
 	const connection = joinVoiceChannel({
@@ -40,11 +45,18 @@ export async function joinChannel(guild: Guild, voiceChannelId: string): Promise
 		selfMute: false,
 	});
 
+	try {
+		// Wait for UDP voice connection to be established
+		await entersState(connection, VoiceConnectionStatus.Ready, 15_000);
+	} catch (err) {
+		// Must destroy — sends WS op4 channel_id:null so Discord removes bot from channel
+		connection.destroy();
+		throw err;
+	}
+
 	const player = createAudioPlayer();
 	connection.subscribe(player);
 
-	// Store immediately — isActive() returns true, messages are accepted
-	// We don't block on Ready here; processQueue waits for Ready before playing
 	connections.set(guild.id, { connection, player, queue: [], playing: false });
 	addSession({ guildId: guild.id, voiceChannelId });
 
@@ -100,9 +112,6 @@ async function processQueue(guildId: string): Promise<void> {
 	const { text, config } = conn.queue.shift()!;
 
 	try {
-		// Wait up to 60s for the voice connection to be ready before playing
-		await entersState(conn.connection, VoiceConnectionStatus.Ready, 60_000);
-
 		const audioStream = await synthesize(text, config);
 		const resource = createAudioResource(audioStream, {
 			inputType: StreamType.Arbitrary,

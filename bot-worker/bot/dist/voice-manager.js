@@ -8,7 +8,12 @@ export async function joinChannel(guild, voiceChannelId) {
     }
     const channel = guild.channels.cache.get(voiceChannelId);
     if (!channel || !channel.isVoiceBased()) {
-        throw new Error('Channel not found or not a voice channel');
+        // Channel not in cache — fetch it and retry
+        await guild.channels.fetch();
+        const fetched = guild.channels.cache.get(voiceChannelId);
+        if (!fetched || !fetched.isVoiceBased()) {
+            throw new Error('Channel not found or not a voice channel');
+        }
     }
     const connection = joinVoiceChannel({
         channelId: voiceChannelId,
@@ -17,9 +22,19 @@ export async function joinChannel(guild, voiceChannelId) {
         selfDeaf: true,
         selfMute: false,
     });
-    await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
+    try {
+        // Wait for UDP voice connection to be established
+        await entersState(connection, VoiceConnectionStatus.Ready, 15_000);
+    }
+    catch (err) {
+        // Must destroy — sends WS op4 channel_id:null so Discord removes bot from channel
+        connection.destroy();
+        throw err;
+    }
     const player = createAudioPlayer();
     connection.subscribe(player);
+    connections.set(guild.id, { connection, player, queue: [], playing: false });
+    addSession({ guildId: guild.id, voiceChannelId });
     connection.on(VoiceConnectionStatus.Disconnected, async () => {
         try {
             await Promise.race([
@@ -33,8 +48,6 @@ export async function joinChannel(guild, voiceChannelId) {
             removeSession(guild.id);
         }
     });
-    connections.set(guild.id, { connection, player, queue: [], playing: false });
-    addSession({ guildId: guild.id, voiceChannelId });
 }
 export async function leaveChannel(guildId) {
     const conn = connections.get(guildId);

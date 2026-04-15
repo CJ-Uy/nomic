@@ -10,8 +10,8 @@ export const client = new Client({
 		GatewayIntentBits.Guilds,
 		GatewayIntentBits.GuildVoiceStates,
 		GatewayIntentBits.GuildMessages,
-		GatewayIntentBits.MessageContent,
-	],
+		GatewayIntentBits.MessageContent
+	]
 });
 
 client.once(Events.ClientReady, (c) => {
@@ -23,8 +23,12 @@ client.on(Events.MessageCreate, async (message) => {
 	if (message.author.bot) return;
 	if (!message.guildId) return;
 
-	// Only handle messages sent in voice channel text chats (type = GuildVoice)
-	if (message.channel.type !== ChannelType.GuildVoice) return;
+	// Only handle messages sent in voice/stage channel text chats
+	if (
+		message.channel.type !== ChannelType.GuildVoice &&
+		message.channel.type !== ChannelType.GuildStageVoice
+	)
+		return;
 
 	if (!isActive(message.guildId)) return;
 
@@ -47,7 +51,7 @@ client.on(Events.MessageCreate, async (message) => {
 async function fetchVoiceConfig(userId: string, guildId: string): Promise<VoiceConfig> {
 	try {
 		const res = await fetch(`${WORKER_URL}/api/voice/${userId}/${guildId}`, {
-			headers: { 'x-bot-secret': BOT_SECRET },
+			headers: { 'x-bot-secret': BOT_SECRET }
 		});
 		if (!res.ok) throw new Error(`Voice API ${res.status}`);
 		const row = (await res.json()) as { voice: string; rate: string; pitch: string };
@@ -81,7 +85,12 @@ export async function botJoin(
 		);
 	} catch (err) {
 		console.error('[bot] Join error:', err);
-		await sendFollowup(interactionToken, appId, 'Failed to join. Check my permissions (Connect + Speak).');
+		await leaveChannel(guildId);
+		await sendFollowup(
+			interactionToken,
+			appId,
+			'Failed to join. Check my permissions (Connect + Speak).'
+		);
 	}
 }
 
@@ -91,6 +100,21 @@ export async function botLeave(
 	appId: string
 ): Promise<void> {
 	await leaveChannel(guildId);
+	// leaveChannel destroys the VoiceConnection which sends WS op4 (channel_id: null).
+	// If no connection was stored (e.g. join failed before Ready), send the op4 manually
+	// via the guild's shard — this doesn't require MOVE_MEMBERS like REST does.
+	try {
+		const guild = await client.guilds.fetch(guildId);
+		const botVoiceChannelId = guild.members.me?.voice.channelId;
+		if (botVoiceChannelId) {
+			(guild as any).shard?.send({
+				op: 4,
+				d: { guild_id: guildId, channel_id: null, self_mute: false, self_deaf: false },
+			});
+		}
+	} catch (err) {
+		console.warn('[bot] Leave fallback error:', err);
+	}
 	await sendFollowup(interactionToken, appId, 'Left the voice channel. Goodbye!');
 }
 
@@ -98,6 +122,6 @@ async function sendFollowup(token: string, appId: string, content: string): Prom
 	await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}/messages/@original`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ content }),
+		body: JSON.stringify({ content })
 	});
 }
