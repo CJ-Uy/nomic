@@ -34,5 +34,13 @@
 			"binding": "BOT",
 			"service": "nomic-bot"
 		}
+	],
+
+	"routes": [
+		{
+			"pattern": "nomic.cjuy.dev",
+			"zone_name": "cjuy.dev",
+			"custom_domain": true
+		}
 	]
 }
