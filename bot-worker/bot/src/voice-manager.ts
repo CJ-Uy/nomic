@@ -45,18 +45,11 @@ export async function joinChannel(guild: Guild, voiceChannelId: string): Promise
 		selfMute: false,
 	});
 
-	try {
-		// Wait for UDP voice connection to be established
-		await entersState(connection, VoiceConnectionStatus.Ready, 15_000);
-	} catch (err) {
-		// Must destroy — sends WS op4 channel_id:null so Discord removes bot from channel
-		connection.destroy();
-		throw err;
-	}
-
 	const player = createAudioPlayer();
 	connection.subscribe(player);
 
+	// Register immediately so isActive() returns true and messages start queuing.
+	// The WS op4 was already sent by joinVoiceChannel; UDP Ready comes asynchronously.
 	connections.set(guild.id, { connection, player, queue: [], playing: false });
 	addSession({ guildId: guild.id, voiceChannelId });
 
@@ -71,6 +64,11 @@ export async function joinChannel(guild: Guild, voiceChannelId: string): Promise
 			connections.delete(guild.id);
 			removeSession(guild.id);
 		}
+	});
+
+	// Wait for UDP voice connection in background. If it never establishes, clean up.
+	entersState(connection, VoiceConnectionStatus.Ready, 30_000).catch(() => {
+		leaveChannel(guild.id);
 	});
 }
 
@@ -112,6 +110,11 @@ async function processQueue(guildId: string): Promise<void> {
 	const { text, config } = conn.queue.shift()!;
 
 	try {
+		// Wait for UDP Ready before playing — audio sent before Ready is dropped
+		if (conn.connection.state.status !== VoiceConnectionStatus.Ready) {
+			await entersState(conn.connection, VoiceConnectionStatus.Ready, 30_000);
+		}
+
 		const audioStream = await synthesize(text, config);
 		const resource = createAudioResource(audioStream, {
 			inputType: StreamType.Arbitrary,
