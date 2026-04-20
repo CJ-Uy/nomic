@@ -19,35 +19,61 @@ client.once(Events.ClientReady, (c) => {
 	console.log(`[nomic] Logged in as ${c.user.tag}`);
 });
 
+async function safeSend(message: import('discord.js').Message, content: string): Promise<void> {
+	try {
+		await message.reply(content);
+	} catch (replyErr) {
+		console.error('[bot] reply() failed:', replyErr);
+		try {
+			if ('send' in message.channel) await message.channel.send(content);
+		} catch (sendErr) {
+			console.error('[bot] channel.send() also failed:', sendErr);
+		}
+	}
+}
+
 // Read messages typed in the voice channel's built-in text chat
 client.on(Events.MessageCreate, async (message) => {
 	if (message.author.bot) return;
 	if (!message.guildId) return;
 
-	// Only handle messages sent in voice/stage channel text chats
+	console.log(`[bot] MessageCreate: channel=${message.channel.type} guild=${message.guildId} active=${isActive(message.guildId)}`);
+
+	// If bot is active and user typed in a regular text channel, guide them
 	if (
 		message.channel.type !== ChannelType.GuildVoice &&
 		message.channel.type !== ChannelType.GuildStageVoice
-	)
+	) {
+		if (isActive(message.guildId)) {
+			await safeSend(message, 'Type in the **voice channel text chat** (the text input inside the voice channel itself), not in a regular text channel.');
+		}
 		return;
+	}
 
-	if (!isActive(message.guildId)) return;
+	if (!isActive(message.guildId)) {
+		await safeSend(message, '[Debug] Bot has no active voice connection — try `/nomic leave` then `/nomic join` again.');
+		return;
+	}
 
-	// Use our own session record instead of discord.js member cache — the cache
-	// may not have the bot's voice state yet if VOICE_STATE_UPDATE hasn't been
-	// processed since the last joinVoiceChannel() call.
 	const session = getSession(message.guildId);
-	if (!session) return;
-	if (message.channelId !== session.voiceChannelId) return;
+	if (!session) {
+		await safeSend(message, '[Debug] No session found — try `/nomic leave` then `/nomic join`.');
+		return;
+	}
+	if (message.channelId !== session.voiceChannelId) {
+		await safeSend(message, `[Debug] Wrong channel — bot is in <#${session.voiceChannelId}>, type there.`);
+		return;
+	}
 
 	const text = message.content.trim().slice(0, 300);
 	if (!text) {
-		console.warn(`[bot] Empty content from ${message.author.id} — ensure "Message Content" privileged intent is enabled in Discord Dev Portal`);
+		await safeSend(message, '⚠️ Cannot read message content. Enable the **Message Content** privileged intent in the Discord Developer Portal, then rejoin.');
 		return;
 	}
 
 	const config = await fetchVoiceConfig(message.author.id, message.guildId);
 	console.log(`[bot] Queuing speech: "${text.slice(0, 60)}" (voice: ${config.voice})`);
+	await safeSend(message, `[Debug] Processing TTS: "${text.slice(0, 50)}"...`);
 	await enqueueSpeech(message.guildId, text, config);
 });
 
