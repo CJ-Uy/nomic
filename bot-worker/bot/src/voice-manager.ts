@@ -112,16 +112,20 @@ async function processQueue(guildId: string): Promise<void> {
 	try {
 		// Wait for UDP Ready before playing — audio sent before Ready is dropped
 		if (conn.connection.state.status !== VoiceConnectionStatus.Ready) {
+			console.log(`[voice-manager] Waiting for voice Ready (current: ${conn.connection.state.status})`);
 			await entersState(conn.connection, VoiceConnectionStatus.Ready, 30_000);
 		}
 
+		console.log(`[voice-manager] Synthesizing: "${text.slice(0, 60)}"`);
 		const audioStream = await synthesize(text, config);
+		console.log(`[voice-manager] Playing audio`);
 		const resource = createAudioResource(audioStream, {
 			inputType: StreamType.Arbitrary,
 		});
 
 		conn.player.play(resource);
 		await entersState(conn.player, AudioPlayerStatus.Idle, 60_000);
+		console.log(`[voice-manager] Done playing`);
 	} catch (err) {
 		console.error('[voice-manager] TTS error:', err);
 	}

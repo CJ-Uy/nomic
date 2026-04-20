@@ -1,5 +1,6 @@
 import { Client, GatewayIntentBits, ChannelType, Events } from 'discord.js';
 import { joinChannel, leaveChannel, isActive, enqueueSpeech } from './voice-manager.js';
+import { getSession } from './session-store.js';
 import type { VoiceConfig } from './tts.js';
 
 const WORKER_URL = process.env.WORKER_URL ?? '';
@@ -32,19 +33,21 @@ client.on(Events.MessageCreate, async (message) => {
 
 	if (!isActive(message.guildId)) return;
 
-	const guild = message.guild;
-	if (!guild) return;
-
-	// Only read messages from the channel the bot is in
-	const botVoiceState = guild.members.me?.voice;
-	if (!botVoiceState?.channelId) return;
-	if (message.channelId !== botVoiceState.channelId) return;
-
-	const config = await fetchVoiceConfig(message.author.id, message.guildId);
+	// Use our own session record instead of discord.js member cache — the cache
+	// may not have the bot's voice state yet if VOICE_STATE_UPDATE hasn't been
+	// processed since the last joinVoiceChannel() call.
+	const session = getSession(message.guildId);
+	if (!session) return;
+	if (message.channelId !== session.voiceChannelId) return;
 
 	const text = message.content.trim().slice(0, 300);
-	if (!text) return;
+	if (!text) {
+		console.warn(`[bot] Empty content from ${message.author.id} — ensure "Message Content" privileged intent is enabled in Discord Dev Portal`);
+		return;
+	}
 
+	const config = await fetchVoiceConfig(message.author.id, message.guildId);
+	console.log(`[bot] Queuing speech: "${text.slice(0, 60)}" (voice: ${config.voice})`);
 	await enqueueSpeech(message.guildId, text, config);
 });
 

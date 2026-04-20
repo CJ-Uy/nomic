@@ -22,17 +22,10 @@ export async function joinChannel(guild, voiceChannelId) {
         selfDeaf: true,
         selfMute: false,
     });
-    try {
-        // Wait for UDP voice connection to be established
-        await entersState(connection, VoiceConnectionStatus.Ready, 15_000);
-    }
-    catch (err) {
-        // Must destroy — sends WS op4 channel_id:null so Discord removes bot from channel
-        connection.destroy();
-        throw err;
-    }
     const player = createAudioPlayer();
     connection.subscribe(player);
+    // Register immediately so isActive() returns true and messages start queuing.
+    // The WS op4 was already sent by joinVoiceChannel; UDP Ready comes asynchronously.
     connections.set(guild.id, { connection, player, queue: [], playing: false });
     addSession({ guildId: guild.id, voiceChannelId });
     connection.on(VoiceConnectionStatus.Disconnected, async () => {
@@ -47,6 +40,10 @@ export async function joinChannel(guild, voiceChannelId) {
             connections.delete(guild.id);
             removeSession(guild.id);
         }
+    });
+    // Wait for UDP voice connection in background. If it never establishes, clean up.
+    entersState(connection, VoiceConnectionStatus.Ready, 30_000).catch(() => {
+        leaveChannel(guild.id);
     });
 }
 export async function leaveChannel(guildId) {
@@ -79,12 +76,20 @@ async function processQueue(guildId) {
     conn.playing = true;
     const { text, config } = conn.queue.shift();
     try {
+        // Wait for UDP Ready before playing — audio sent before Ready is dropped
+        if (conn.connection.state.status !== VoiceConnectionStatus.Ready) {
+            console.log(`[voice-manager] Waiting for voice Ready (current: ${conn.connection.state.status})`);
+            await entersState(conn.connection, VoiceConnectionStatus.Ready, 30_000);
+        }
+        console.log(`[voice-manager] Synthesizing: "${text.slice(0, 60)}"`);
         const audioStream = await synthesize(text, config);
+        console.log(`[voice-manager] Playing audio`);
         const resource = createAudioResource(audioStream, {
             inputType: StreamType.Arbitrary,
         });
         conn.player.play(resource);
         await entersState(conn.player, AudioPlayerStatus.Idle, 60_000);
+        console.log(`[voice-manager] Done playing`);
     }
     catch (err) {
         console.error('[voice-manager] TTS error:', err);
